@@ -1,0 +1,64 @@
+import csv
+import subprocess
+import os
+from typing import List, Dict
+
+def read_config(file_path: str) -> Dict[str, str]:
+    """Читает конфигурационный CSV файл."""
+    config = {}
+    with open(file_path, mode='r') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            config = row
+    return config
+
+def fetch_dependencies(package_name: str, max_depth: int) -> Dict[str, List[str]]:
+    """Рекурсивно извлекает зависимости пакета."""
+    dependencies = {}
+
+    def fetch(package: str, depth: int):
+        if depth > max_depth or package in dependencies:
+            return
+        # Симуляция получения зависимостей (здесь нужно использовать .nupkg анализ)
+        # Например: dependencies[package] = parse_nupkg_dependencies(package)
+        dependencies[package] = [f"{package}.dep{depth}.{i}" for i in range(2)]  # заглушка
+        for dep in dependencies[package]:
+            fetch(dep, depth + 1)
+
+    fetch(package_name, 0)
+    return dependencies
+
+def generate_plantuml(dependencies: Dict[str, List[str]], output_path: str):
+    """Генерирует PlantUML-описание графа зависимостей."""
+    with open(output_path, 'w') as file:
+        file.write("@startuml\n")
+        for parent, children in dependencies.items():
+            for child in children:
+                file.write(f"{parent} --> {child}\n")
+        file.write("@enduml\n")
+
+def visualize_graph(plantuml_path: str, uml_file: str, output_png: str):
+    """Вызывает инструмент для визуализации PlantUML в PNG."""
+    subprocess.run([plantuml_path, uml_file], check=True)
+    if not os.path.exists(output_png):
+        raise FileNotFoundError(f"Output PNG file not found: {output_png}")
+
+def main():
+    config = read_config('config.csv')
+
+    package_name = config['Имя анализируемого пакета']
+    plantuml_path = config['Путь к программе для визуализации графов']
+    output_path = config['Путь к файлу с изображением графа зависимостей']
+    max_depth = int(config['Максимальная глубина анализа зависимостей'])
+
+    dependencies = fetch_dependencies(package_name, max_depth)
+
+    uml_file = output_path.replace('.png', '.uml')
+    generate_plantuml(dependencies, uml_file)
+
+    visualize_graph(plantuml_path, uml_file, output_path)
+
+    print("Граф зависимостей успешно создан и сохранен в файл", output_path)
+
+if __name__ == "__main__":
+    main()
