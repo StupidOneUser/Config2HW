@@ -1,0 +1,53 @@
+import unittest
+from unittest.mock import patch, mock_open, MagicMock
+import os
+from dotnet_dependencies import read_config, fetch_dependencies, generate_plantuml, visualize_graph
+
+class TestDotnetDependencies(unittest.TestCase):
+
+    def test_read_config(self):
+        mock_csv = """Имя анализируемого пакета,Путь к программе для визуализации графов,Путь к файлу с изображением графа зависимостей,Максимальная глубина анализа зависимостей
+TestPackage,/path/to/plantuml,/path/to/output.png,3"""
+        with patch("builtins.open", mock_open(read_data=mock_csv)):
+            config = read_config("config.csv")
+            self.assertEqual(config['Имя анализируемого пакета'], "TestPackage")
+            self.assertEqual(config['Путь к программе для визуализации графов'], "/path/to/plantuml")
+            self.assertEqual(config['Путь к файлу с изображением графа зависимостей'], "/path/to/output.png")
+            self.assertEqual(config['Максимальная глубина анализа зависимостей'], "3")
+
+    def test_fetch_dependencies(self):
+        dependencies = fetch_dependencies("TestPackage", 2)
+        self.assertIn("TestPackage", dependencies)
+        self.assertTrue(all(dep.startswith("TestPackage.dep0.") for dep in dependencies["TestPackage"]))
+        self.assertEqual(len(dependencies["TestPackage"]), 2)
+
+    @patch("builtins.open", new_callable=mock_open)
+    def test_generate_plantuml(self, mock_file):
+        dependencies = {
+            "TestPackage": ["TestPackage.dep0.0", "TestPackage.dep0.1"],
+            "TestPackage.dep0.0": ["TestPackage.dep1.0"],
+        }
+        generate_plantuml(dependencies, "output.uml")
+        mock_file.assert_called_once_with("output.uml", 'w')
+        handle = mock_file()
+        handle.write.assert_any_call("@startuml\n")
+        handle.write.assert_any_call("TestPackage --> TestPackage.dep0.0\n")
+        handle.write.assert_any_call("@enduml\n")
+
+    @patch("subprocess.run")
+    @patch("os.path.exists")
+    def test_visualize_graph(self, mock_exists, mock_run):
+        mock_exists.return_value = True
+        visualize_graph("/path/to/plantuml", "output.uml", "output.png")
+        mock_run.assert_called_once_with(["/path/to/plantuml", "output.uml"], check=True)
+        mock_exists.assert_called_once_with("output.png")
+
+    @patch("subprocess.run")
+    @patch("os.path.exists")
+    def test_visualize_graph_file_not_found(self, mock_exists, mock_run):
+        mock_exists.return_value = False
+        with self.assertRaises(FileNotFoundError):
+            visualize_graph("/path/to/plantuml", "output.uml", "output.png")
+
+if __name__ == "__main__":
+    unittest.main()
